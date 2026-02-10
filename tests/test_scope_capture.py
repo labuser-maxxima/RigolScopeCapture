@@ -138,6 +138,10 @@ class TestParsePreamble:
         assert p["yorigin"] == pytest.approx(0.0)
         assert p["yreference"] == pytest.approx(128.0)
 
+    def test_malformed_raises(self):
+        with pytest.raises(ValueError, match="expected 10 fields"):
+            scope_capture.parse_preamble("0,1,2")
+
 
 # ---------------------------------------------------------------------------
 # strip_tmc_header

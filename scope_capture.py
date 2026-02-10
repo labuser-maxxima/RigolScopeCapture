@@ -136,6 +136,10 @@ def choose_memory_depth(total_time_s):
 def parse_preamble(preamble_str):
     """Parse the ``:WAVeform:PREamble?`` response into a dictionary."""
     parts = preamble_str.strip().split(",")
+    if len(parts) < 10:
+        raise ValueError(
+            f"Malformed preamble: expected 10 fields, got {len(parts)}"
+        )
     return {
         "format": int(parts[0]),         # 0=BYTE, 1=WORD, 2=ASCii
         "type": int(parts[1]),           # 0=NORMal, 1=MAXimum, 2=RAW
@@ -156,11 +160,13 @@ def strip_tmc_header(raw):
     The header has the form ``#NXXXXXXX`` where *N* is the number of
     digits that follow and *XXXXXXX* is the byte-count.
     """
-    if raw[0:1] == b"#":
-        n_digits = int(raw[1:2])
-        data_len = int(raw[2 : 2 + n_digits])
-        return raw[2 + n_digits : 2 + n_digits + data_len]
-    return raw
+    if len(raw) < 2 or raw[0:1] != b"#":
+        return raw
+    n_digits = int(raw[1:2])
+    if len(raw) < 2 + n_digits:
+        return raw
+    data_len = int(raw[2 : 2 + n_digits])
+    return raw[2 + n_digits : 2 + n_digits + data_len]
 
 
 # ---------------------------------------------------------------------------
