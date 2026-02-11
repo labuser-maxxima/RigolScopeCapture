@@ -43,6 +43,11 @@ MAX_SAMPLE_RATE = 1.25e9
 # Available memory depth presets (points) for DHO800 series
 MEMORY_DEPTHS = [1000, 10000, 100000, 1000000, 10000000]
 
+# Trigger polling settings for single-shot acquisition
+TRIGGER_POLL_INTERVAL_S = 0.3   # seconds between :TRIGger:STATus? polls
+TRIGGER_TIMEOUT_BUFFER_S = 10.0 # extra seconds added to acquisition time for trigger
+FORCE_TRIGGER_TIMEOUT_S = 5.0   # extra seconds to wait after :TFORce
+
 # Valid time/div values in seconds (1-2-5 sequence)
 VALID_TIMESCALES = [
     1e-9, 2e-9, 5e-9,
@@ -273,7 +278,7 @@ def run_single_acquisition(scope, total_time_s, timeout=None):
     if timeout is None:
         # Generous: the acquisition itself takes *total_time_s*, plus
         # time for the scope to arm and trigger.
-        timeout = total_time_s + 10.0
+        timeout = total_time_s + TRIGGER_TIMEOUT_BUFFER_S
 
     scope.write(":SINGle")
 
@@ -286,19 +291,19 @@ def run_single_acquisition(scope, total_time_s, timeout=None):
             return True
         if status == "TD":
             triggered = True
-        time.sleep(0.3)
+        time.sleep(TRIGGER_POLL_INTERVAL_S)
 
     # If we timed out without triggering, force-trigger and wait once more.
     if not triggered:
         print("  No trigger event detected – forcing trigger...")
         scope.write(":TFORce")
         # Wait for the acquisition to finish (needs *total_time_s*).
-        force_deadline = time.time() + total_time_s + 5.0
+        force_deadline = time.time() + total_time_s + FORCE_TRIGGER_TIMEOUT_S
         while time.time() < force_deadline:
             status = scope.query(":TRIGger:STATus?").strip().upper()
             if status == "STOP":
                 return True
-            time.sleep(0.3)
+            time.sleep(TRIGGER_POLL_INTERVAL_S)
 
     return False
 
