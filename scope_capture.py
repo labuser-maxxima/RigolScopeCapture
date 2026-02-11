@@ -257,6 +257,52 @@ def set_memory_depth(scope, depth):
     return scope.query(":ACQuire:MDEPth?").strip()
 
 
+def run_single_acquisition(scope, total_time_s, timeout=None):
+    """Start a single-shot acquisition and wait for it to complete.
+
+    Sends ``:SINGle`` so the scope arms, triggers once, fills the entire
+    memory buffer, and stops.  The function polls ``:TRIGger:STATus?``
+    until the scope reports ``STOP`` (acquisition complete).
+
+    If no trigger event occurs within *timeout* seconds a forced trigger
+    (``:TFORce``) is issued so the capture still succeeds.
+
+    Returns ``True`` if the acquisition completed, ``False`` on timeout
+    even after the forced trigger.
+    """
+    if timeout is None:
+        # Generous: the acquisition itself takes *total_time_s*, plus
+        # time for the scope to arm and trigger.
+        timeout = total_time_s + 10.0
+
+    scope.write(":SINGle")
+
+    deadline = time.time() + timeout
+    triggered = False
+
+    while time.time() < deadline:
+        status = scope.query(":TRIGger:STATus?").strip().upper()
+        if status == "STOP":
+            return True
+        if status == "TD":
+            triggered = True
+        time.sleep(0.3)
+
+    # If we timed out without triggering, force-trigger and wait once more.
+    if not triggered:
+        print("  No trigger event detected – forcing trigger...")
+        scope.write(":TFORce")
+        # Wait for the acquisition to finish (needs *total_time_s*).
+        force_deadline = time.time() + total_time_s + 5.0
+        while time.time() < force_deadline:
+            status = scope.query(":TRIGger:STATus?").strip().upper()
+            if status == "STOP":
+                return True
+            time.sleep(0.3)
+
+    return False
+
+
 def capture_screen(scope, filename):
     """Save the current display as a PNG image to *filename*."""
     print("Capturing screen image...")
@@ -455,8 +501,6 @@ Examples:
         actual_md = set_memory_depth(scope, mem_depth)
         print(f"Memory depth set to: {actual_md}")
 
-        time.sleep(1)  # let acquisition settle
-
         # --- Channels ---
         if args.channels:
             channels = args.channels
@@ -469,7 +513,20 @@ Examples:
 
         print(f"Channels: {', '.join(f'CH{c}' for c in channels)}")
 
+        # --- Single-shot acquisition ---
+        # Use :SINGle so the scope fills its entire memory buffer for the
+        # full screen duration, then stops automatically.  This avoids the
+        # race where :STOP interrupts an in-progress acquisition and only
+        # a fraction of the data is captured.
+        print(f"\nRunning single acquisition ({format_timescale(total_time)})...")
+        ok = run_single_acquisition(scope, total_time)
+        if ok:
+            print("Acquisition complete.")
+        else:
+            print("Warning: acquisition may be incomplete (trigger timeout).")
+
         # --- Screen capture ---
+        # Captured AFTER acquisition so the screenshot matches the data.
         if not args.no_image:
             img_path = os.path.join(
                 args.output_dir, f"scope_capture_{timestamp}.png"
@@ -477,22 +534,22 @@ Examples:
             capture_screen(scope, img_path)
 
         # --- Waveform data ---
+        # Scope is already stopped after :SINGle; read full RAW data.
         if not args.no_csv:
             print("\n--- Capturing Waveform Data ---")
-            scope.write(":STOP")
-            time.sleep(0.5)
 
             channel_data = {}
             for ch in channels:
                 t, v, p = read_waveform_data(scope, ch, mode="RAW")
                 channel_data[ch] = (t, v, p)
 
-            scope.write(":RUN")
-
             csv_path = os.path.join(
                 args.output_dir, f"waveform_{timestamp}.csv"
             )
             save_csv(csv_path, channel_data)
+
+        # Resume continuous acquisition so the scope isn't left stopped.
+        scope.write(":RUN")
 
         print("\n--- Capture Complete ---")
     finally:
