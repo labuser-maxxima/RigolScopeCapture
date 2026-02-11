@@ -47,6 +47,9 @@ MEMORY_DEPTHS = [1000, 10000, 100000, 1000000, 10000000]
 # ensure the display has been fully refreshed with new data.
 ACQUISITION_SETTLE_S = 2.0
 
+# Seconds to pause after sending :STOP, to let the scope finish stopping.
+STOP_SETTLE_S = 0.5
+
 # Valid time/div values in seconds (1-2-5 sequence)
 VALID_TIMESCALES = [
     1e-9, 2e-9, 5e-9,
@@ -273,7 +276,7 @@ def wait_and_stop(scope, total_time_s):
     print(f"  Waiting {wait:.1f}s for acquisition...")
     time.sleep(wait)
     scope.write(":STOP")
-    time.sleep(0.5)  # let the scope finish stopping
+    time.sleep(STOP_SETTLE_S)  # let the scope finish stopping
 
 
 def capture_screen(scope, filename):

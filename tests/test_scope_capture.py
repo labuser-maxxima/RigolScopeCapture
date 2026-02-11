@@ -158,6 +158,15 @@ class TestWaitAndStop:
         # :RUN must come before :STOP
         assert calls.index(":RUN") < calls.index(":STOP")
 
+    @mock.patch("scope_capture.time.sleep")
+    def test_sleep_duration(self, mock_sleep):
+        """Wait time includes total_time plus settle buffer."""
+        scope = mock.MagicMock()
+        scope_capture.wait_and_stop(scope, total_time_s=1.0)
+        # First sleep should be total_time + ACQUISITION_SETTLE_S
+        expected = 1.0 + scope_capture.ACQUISITION_SETTLE_S
+        mock_sleep.assert_any_call(expected)
+
 
 # ---------------------------------------------------------------------------
 # strip_tmc_header
