@@ -144,40 +144,19 @@ class TestParsePreamble:
 
 
 # ---------------------------------------------------------------------------
-# run_single_acquisition
+# wait_and_stop
 # ---------------------------------------------------------------------------
 
-class TestRunSingleAcquisition:
-    def _make_mock_scope(self, status_sequence):
-        """Return a mock scope whose :TRIGger:STATus? replies follow *status_sequence*."""
+class TestWaitAndStop:
+    def test_sends_run_then_stop(self):
+        """Verify :RUN is sent, then :STOP after waiting."""
         scope = mock.MagicMock()
-        scope.query.side_effect = [f"  {s}  " for s in status_sequence]
-        return scope
-
-    def test_immediate_stop(self):
-        """Scope already stopped → returns True immediately."""
-        scope = self._make_mock_scope(["STOP"])
-        result = scope_capture.run_single_acquisition(scope, total_time_s=1.0, timeout=2)
-        assert result is True
-        scope.write.assert_any_call(":SINGle")
-
-    def test_triggered_then_stop(self):
-        """Scope transitions WAIT → TD → STOP."""
-        scope = self._make_mock_scope(["WAIT", "TD", "STOP"])
-        result = scope_capture.run_single_acquisition(scope, total_time_s=0.1, timeout=5)
-        assert result is True
-
-    def test_force_trigger_on_timeout(self):
-        """When no trigger fires within timeout, :TFORce is sent."""
-        # Provide enough WAIT responses to exhaust the main loop, then STOP
-        # after force trigger.
-        responses = ["WAIT"] * 5 + ["STOP"]
-        scope = self._make_mock_scope(responses)
-        result = scope_capture.run_single_acquisition(scope, total_time_s=0.01, timeout=0.5)
-        assert result is True
-        # Verify :TFORce was sent
-        force_calls = [c for c in scope.write.call_args_list if c == mock.call(":TFORce")]
-        assert len(force_calls) >= 1
+        scope_capture.wait_and_stop(scope, total_time_s=0.0)
+        calls = [c[0][0] for c in scope.write.call_args_list]
+        assert ":RUN" in calls
+        assert ":STOP" in calls
+        # :RUN must come before :STOP
+        assert calls.index(":RUN") < calls.index(":STOP")
 
 
 # ---------------------------------------------------------------------------
